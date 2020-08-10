@@ -1,0 +1,63 @@
+Note: This change adds a 3rd element "position" to the Decoded namedtuple, so you'll probably have to adapt your code.
+
+In file wrapper.py:
+
+Appended the following lines to the file:
+
+zbar_symbol_get_loc_size = zbar_function(
+    'zbar_symbol_get_loc_size',
+    c_uint,
+    POINTER(c_int)         # values in ZBarSymbol
+)
+
+zbar_symbol_get_loc_x = zbar_function(
+    'zbar_symbol_get_loc_x',
+    c_uint,
+    POINTER(c_int)         # values in ZBarSymbol
+)
+
+zbar_symbol_get_loc_y = zbar_function(
+    'zbar_symbol_get_loc_y',
+    c_uint,
+    POINTER(c_int)         # values in ZBarSymbol
+)
+
+
+In file pyzbar.py:
+
+Near the top of the file, added position to the namedtuple:
+
+# Results of reading a barcode
+# position is a list of tuples(x,y) describing the corners of the symbol.
+Decoded = namedtuple('Decoded', ['data', 'type', 'position'])
+
+Near the end of the file, modified the while symbol loop:
+
+        with zbar_image() as img:
+            zbar_image_set_format(img, FOURCC['L800'])
+            zbar_image_set_size(img, width, height)
+            zbar_image_set_data(img, cast(pixels, c_void_p), len(pixels), None)
+            decoded = zbar_scan_image(scanner, img)
+            if decoded < 0:
+                raise PyZbarError('Unsupported image format')
+            else:
+                symbol = zbar_image_first_symbol(img)
+                while symbol:
+                    data = string_at(zbar_symbol_get_data(symbol))
+                    symbol_type = ZBarSymbol(symbol.contents.value).name
+
+                    # add support for positions
+                    position = []
+                    for i in range(zbar_symbol_get_loc_size(symbol)):
+                        x = zbar_symbol_get_loc_x(symbol, i)
+                        y = zbar_symbol_get_loc_y(symbol, i)
+                        position.append((x, y))
+                    results.append(Decoded(
+                        data=data,
+                        type=symbol_type,
+                        position=position
+                    ))
+
+                    symbol = zbar_symbol_next(symbol)
+
+    return results
